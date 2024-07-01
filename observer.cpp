@@ -1,5 +1,6 @@
 /**
  * Observer Design Pattern
+ * Source: https://refactoring.guru/design-patterns/observer/cpp/example#example-0
  *
  * Intent: Lets you define a subscription mechanism to notify multiple objects
  * about any events that happen to the object they're observing.
