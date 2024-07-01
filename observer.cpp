@@ -1,87 +1,151 @@
-// The base publisher class includes subscription management
-// code and notification methods.
-class EventManager is
-    private field listeners: hash map of event types and listeners
+/**
+ * Observer Design Pattern
+ *
+ * Intent: Lets you define a subscription mechanism to notify multiple objects
+ * about any events that happen to the object they're observing.
+ *
+ * Note that there's a lot of different terms with similar meaning associated
+ * with this pattern. Just remember that the Subject is also called the
+ * Publisher and the Observer is often called the Subscriber and vice versa.
+ * Also the verbs "observe", "listen" or "track" usually mean the same thing.
+ */
 
-    method subscribe(eventType, listener) is
-        listeners.add(eventType, listener)
+#include <iostream>
+#include <list>
+#include <string>
 
-    method unsubscribe(eventType, listener) is
-        listeners.remove(eventType, listener)
+class IObserver {
+ public:
+  virtual ~IObserver(){};
+  virtual void Update(const std::string &message_from_subject) = 0;
+};
 
-    method notify(eventType, data) is
-        foreach (listener in listeners.of(eventType)) do
-            listener.update(data)
+class ISubject {
+ public:
+  virtual ~ISubject(){};
+  virtual void Attach(IObserver *observer) = 0;
+  virtual void Detach(IObserver *observer) = 0;
+  virtual void Notify() = 0;
+};
 
-// The concrete publisher contains real business logic that's
-// interesting for some subscribers. We could derive this class
-// from the base publisher, but that isn't always possible in
-// real life because the concrete publisher might already be a
-// subclass. In this case, you can patch the subscription logic
-// in with composition, as we did here.
-class Editor is
-    public field events: EventManager
-    private field file: File
+/**
+ * The Subject owns some important state and notifies observers when the state
+ * changes.
+ */
 
-    constructor Editor() is
-        events = new EventManager()
+class Subject : public ISubject {
+ public:
+  virtual ~Subject() {
+    std::cout << "Goodbye, I was the Subject.\n";
+  }
 
-    // Methods of business logic can notify subscribers about
-    // changes.
-    method openFile(path) is
-        this.file = new File(path)
-        events.notify("open", file.name)
+  /**
+   * The subscription management methods.
+   */
+  void Attach(IObserver *observer) override {
+    list_observer_.push_back(observer);
+  }
+  void Detach(IObserver *observer) override {
+    list_observer_.remove(observer);
+  }
+  void Notify() override {
+    std::list<IObserver *>::iterator iterator = list_observer_.begin();
+    HowManyObserver();
+    while (iterator != list_observer_.end()) {
+      (*iterator)->Update(message_);
+      ++iterator;
+    }
+  }
 
-    method saveFile() is
-        file.write()
-        events.notify("save", file.name)
+  void CreateMessage(std::string message = "Empty") {
+    this->message_ = message;
+    Notify();
+  }
+  void HowManyObserver() {
+    std::cout << "There are " << list_observer_.size() << " observers in the list.\n";
+  }
 
-    // ...
+  /**
+   * Usually, the subscription logic is only a fraction of what a Subject can
+   * really do. Subjects commonly hold some important business logic, that
+   * triggers a notification method whenever something important is about to
+   * happen (or after it).
+   */
+  void SomeBusinessLogic() {
+    this->message_ = "change message message";
+    Notify();
+    std::cout << "I'm about to do some thing important\n";
+  }
 
+ private:
+  std::list<IObserver *> list_observer_;
+  std::string message_;
+};
 
-// Here's the subscriber interface. If your programming language
-// supports functional types, you can replace the whole
-// subscriber hierarchy with a set of functions.
-interface EventListener is
-    method update(filename)
+class Observer : public IObserver {
+ public:
+  Observer(Subject &subject) : subject_(subject) {
+    this->subject_.Attach(this);
+    std::cout << "Hi, I'm the Observer \"" << ++Observer::static_number_ << "\".\n";
+    this->number_ = Observer::static_number_;
+  }
+  virtual ~Observer() {
+    std::cout << "Goodbye, I was the Observer \"" << this->number_ << "\".\n";
+  }
 
-// Concrete subscribers react to updates issued by the publisher
-// they are attached to.
-class LoggingListener implements EventListener is
-    private field log: File
-    private field message: string
+  void Update(const std::string &message_from_subject) override {
+    message_from_subject_ = message_from_subject;
+    PrintInfo();
+  }
+  void RemoveMeFromTheList() {
+    subject_.Detach(this);
+    std::cout << "Observer \"" << number_ << "\" removed from the list.\n";
+  }
+  void PrintInfo() {
+    std::cout << "Observer \"" << this->number_ << "\": a new message is available --> " << this->message_from_subject_ << "\n";
+  }
 
-    constructor LoggingListener(log_filename, message) is
-        this.log = new File(log_filename)
-        this.message = message
+ private:
+  std::string message_from_subject_;
+  Subject &subject_;
+  static int static_number_;
+  int number_;
+};
 
-    method update(filename) is
-        log.write(replace('%s',filename,message))
+int Observer::static_number_ = 0;
 
-class EmailAlertsListener implements EventListener is
-    private field email: string
-    private field message: string
+void ClientCode() {
+  Subject *subject = new Subject;
+  Observer *observer1 = new Observer(*subject);
+  Observer *observer2 = new Observer(*subject);
+  Observer *observer3 = new Observer(*subject);
+  Observer *observer4;
+  Observer *observer5;
 
-    constructor EmailAlertsListener(email, message) is
-        this.email = email
-        this.message = message
+  subject->CreateMessage("Hello World! :D");
+  observer3->RemoveMeFromTheList();
 
-    method update(filename) is
-        system.email(email, replace('%s',filename,message))
+  subject->CreateMessage("The weather is hot today! :p");
+  observer4 = new Observer(*subject);
 
+  observer2->RemoveMeFromTheList();
+  observer5 = new Observer(*subject);
 
-// An application can configure publishers and subscribers at
-// runtime.
-class Application is
-    method config() is
-        editor = new Editor()
+  subject->CreateMessage("My new car is great! ;)");
+  observer5->RemoveMeFromTheList();
 
-        logger = new LoggingListener(
-            "/path/to/log.txt",
-            "Someone has opened the file: %s")
-        editor.events.subscribe("open", logger)
+  observer4->RemoveMeFromTheList();
+  observer1->RemoveMeFromTheList();
 
-        emailAlerts = new EmailAlertsListener(
-            "admin@example.com",
-            "Someone has changed the file: %s")
-        editor.events.subscribe("save", emailAlerts)
+  delete observer5;
+  delete observer4;
+  delete observer3;
+  delete observer2;
+  delete observer1;
+  delete subject;
+}
+
+int main() {
+  ClientCode();
+  return 0;
+}
